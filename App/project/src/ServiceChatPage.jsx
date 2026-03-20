@@ -3,21 +3,14 @@ import { useParams, useLocation } from "react-router-dom";
 import { FiMic, FiSend, FiVolume2, FiVolumeX } from "react-icons/fi";
 import ReactMarkdown from "react-markdown";
 import { franc } from "franc";
-import { createClient } from "@supabase/supabase-js";
-import { useTranslation } from "react-i18next";
+import { supabase } from "./supabase";
 
 const apiUrl = import.meta.env.VITE_API_URL;
-// Initialize Supabase client
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 const ServiceChatPage = () => {
   const { serviceTitle } = useParams();
   const location = useLocation();
   const decodedTitle = decodeURIComponent(serviceTitle);
-  const port = location.state?.port || apiUrl;
 
   const [prompt, setPrompt] = useState("");
   const [recognition, setRecognition] = useState(null);
@@ -198,7 +191,8 @@ const ServiceChatPage = () => {
   const handlePromptSubmit = async () => {
     if (!prompt.trim()) return;
 
-    const userMessage = { role: "user", content: prompt.trim(), lang: detectLanguage(prompt.trim()) };
+    const trimmedPrompt = prompt.trim();
+    const userMessage = { role: "user", content: trimmedPrompt, lang: detectLanguage(trimmedPrompt) };
     setConversation((prev) => [...prev, userMessage]);
     setPrompt("");
 
@@ -210,7 +204,7 @@ const ServiceChatPage = () => {
           "Content-Type": "application/json",
           "X-User-ID": userId,
         },
-        body: JSON.stringify({ query: prompt.trim(), user_id: userId }),
+        body: JSON.stringify({ query: trimmedPrompt, user_id: userId }),
       });
 
       const data = await res.json();

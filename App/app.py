@@ -1,294 +1,308 @@
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sentence_transformers import SentenceTransformer
 from groq import Groq
 from tqdm import tqdm
 import os
-import dotenv
-import fitz  # PyMuPDF for PDF text extraction
+from dotenv import load_dotenv
+import fitz  # PyMuPDF
 from textwrap import wrap
 from supabase import create_client, Client
 import logging
+from typing import Any
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+# ─── Logging ────────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO)  # DEBUG → INFO for production
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+
 app = Flask(__name__)
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": ["https://law-pal.vercel.app", "http://localhost:5173"],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "X-User-ID"],
+        }
+    },
+)
 
-# Configure CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": ["https://law-pal.vercel.app", "http://localhost:5173"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "X-User-ID"],
-    }
-})
-
-dotenv.load_dotenv()
-
-# Initialize Pinecone
+# ─── Clients ────────────────────────────────────────────────
 PINECONE_API_KEY = os.getenv("PINECONE_API")
-PINECONE_ENV = os.getenv("PINECONE_ENV", "us-east-1")
 if not PINECONE_API_KEY:
-    raise ValueError("Missing Pinecone API Key.")
+    raise ValueError("Missing PINECONE_API key")
+
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
-# Initialize Sentence Transformer Model
 model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
-# Initialize Groq
 GROQ_API_KEY = os.getenv("GROQ_API")
 if not GROQ_API_KEY:
-    raise ValueError("Missing Groq API Key.")
+    raise ValueError("Missing GROQ_API key")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-# Initialize Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing Supabase URL or Key.")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    raise ValueError("Missing Supabase credentials")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Store conversation history
-conversation_histories = {
+# In-memory history (consider persisting later)
+conversation_histories: dict[str, dict[str, list[Any]]] = {
     "personal-and-family-legal-assistance": {},
     "business-consumer-and-criminal-legal-assistance": {},
     "consultation": {},
 }
 
-@app.route('/submit-form', methods=['POST'])
+# ─── Form Endpoint ──────────────────────────────────────────
+@app.route("/submit-form", methods=["POST"])
 def submit_form():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    required = ["firstName", "lastName", "email", "subject", "message"]
+    if not all(f in data and data[f] for f in required):
+        return jsonify({"error": "Missing or empty required fields"}), 400
+
     try:
-        # Log the incoming request data
-        logger.debug("Received form data: %s", request.get_data())
-
-        # Check if request has JSON data
-        if not request.is_json:
-            return jsonify({"error": "Request must be JSON"}), 400
-
-        data = request.get_json()
-        logger.debug("Parsed JSON data: %s", data)
-
-        # Validate required fields
-        required_fields = ["firstName", "lastName", "email", "subject", "message"]
-        if not all(field in data and data[field] for field in required_fields):
-            return jsonify({"error": "Missing or empty required fields"}), 400
-
-        # Insert data into Supabase
         response = supabase.table("user_forms").insert(data).execute()
-        logger.debug("Supabase response: %s", response)
-
-        if response.status_code == 201:
+        if response.data:
             return jsonify({"message": "Form submitted successfully!"}), 201
-        else:
-            return jsonify({"error": response.get("message", "Failed to store data in Supabase")}), 500
-
+        return jsonify({"error": "Failed to store in Supabase"}), 500
     except Exception as e:
-        logger.error("Error in submit_form: %s", str(e), exc_info=True)
-        # Check if the table exists and create it if it doesn't
-        try:
-            # This is a basic check; adjust schema as needed
-            supabase.table("user_forms").select("*").limit(1).execute()
-        except Exception as table_error:
-            logger.error("Table 'user_forms' issue: %s", str(table_error), exc_info=True)
-            return jsonify({"error": "Database table 'user_forms' not found or misconfigured. Contact administrator."}), 500
+        logger.exception("Supabase insert failed")
         return jsonify({"error": str(e)}), 500
 
-# Function to extract text from PDFs in Supabase bucket
-def extract_text_from_pdfs(bucket_name: str):
-    all_texts = []
-    chunk_size = 1000
+# ─── PDF → Text Extraction ──────────────────────────────────
+def extract_text_from_pdfs(bucket_name: str = "pdfs"):
+    all_chunks = []
+    CHUNK_SIZE = 1000
+
     try:
         files = supabase.storage.from_(bucket_name).list()
-        if not files or not isinstance(files, list) or len(files) == 0:
-            print(f"No files found in bucket: {bucket_name}")
-            return all_texts
+        if not files:
+            logger.info(f"No files in bucket: {bucket_name}")
+            return all_chunks
     except Exception as e:
-        print(f"Error listing files in Supabase bucket {bucket_name}: {e}")
-        return all_texts
+        logger.error(f"Bucket list failed: {e}")
+        return all_chunks
 
-    for file in tqdm(files, desc="Processing PDFs from Supabase"):
-        if file["name"].endswith(".pdf"):
-            try:
-                pdf_data = supabase.storage.from_(bucket_name).download(file["name"])
-                doc = fitz.open("pdf", pdf_data)
-                text_chunks = []
-                for page in doc:
-                    page_text = page.get_text("text")
-                    if not page_text.strip():
-                        page_dict = page.get_text("dict")
-                        page_text = " ".join(block["text"] for block in page_dict.get("blocks", []) if block.get("type") == 0)
-                    if not page_text.strip():
-                        page_dict = page.get_text("rawdict")
-                        page_text = " ".join(block["text"] for block in page_dict.get("blocks", []) if block.get("type") == 0)
-                    if not page_text.strip():
-                        continue
-                    chunks = wrap(page_text, chunk_size)
-                    text_chunks.extend(chunks)
-                for i, chunk in enumerate(text_chunks):
+    for file in tqdm(files, desc="Processing PDFs"):
+        name = file["name"]
+        if not name.lower().endswith(".pdf"):
+            continue
+
+        try:
+            pdf_bytes = supabase.storage.from_(bucket_name).download(name)
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+            for page_num, page in enumerate(doc, 1):
+                text = page.get_text("text").strip()
+                if not text:
+                    # fallback dict → rawdict
+                    text = " ".join(
+                        block.get("text", "")
+                        for block in page.get_text("dict").get("blocks", [])
+                        if block.get("type") == 0
+                    ).strip()
+                if not text:
+                    continue
+
+                chunks = wrap(text, CHUNK_SIZE)
+                for i, chunk in enumerate(chunks):
                     if chunk.strip():
-                        all_texts.append({"filename": f"{file['name']}_chunk_{i}", "text": chunk})
-            except Exception as e:
-                print(f"Error processing {file['name']}: {e}")
-    return all_texts
+                        all_chunks.append(
+                            {"filename": f"{name}_p{page_num}_c{i}", "text": chunk}
+                        )
+        except Exception as e:
+            logger.error(f"Failed {name}: {e}")
 
-# Function to create Pinecone index
-def create_pinecone_index(bucket_name: str):
-    index_name = "lawpal"
-    existing_indexes = pc.list_indexes().names()
-    if index_name not in existing_indexes:
-        dimension = 384
+    return all_chunks
+
+# ─── Pinecone Index Setup (run once or via env flag) ────────
+def setup_pinecone_index():
+    INDEX_NAME = "lawpal"
+    DIMENSION = 384  # paraphrase-multilingual-MiniLM-L12-v2
+
+    # Modern way: list index names
+    indexes = pc.list_indexes()
+    index_names = [idx.name for idx in indexes]   # updated syntax 2025+
+
+    if INDEX_NAME in index_names:
+        index = pc.Index(INDEX_NAME)
+        stats = index.describe_index_stats()
+        if stats.get("total_vector_count", 0) > 0:
+            logger.info(f"Index '{INDEX_NAME}' already has vectors → skipping upsert")
+            return
+    else:
+        # Create serverless index (2025+ syntax)
         pc.create_index(
-            name=index_name,
-            dimension=dimension,
+            name=INDEX_NAME,
+            dimension=DIMENSION,
             metric="cosine",
-            spec={"serverless": {"cloud": "aws", "region": PINECONE_ENV}}
+            spec=ServerlessSpec(cloud="aws", region="us-east-1"),  # change region if needed
         )
-        print("✅ Index created successfully!")
-    index = pc.Index(index_name)
-    existing_vector_count = index.describe_index_stats()["total_vector_count"]
-    if existing_vector_count > 0:
-        print(f"ℹ️ Pinecone already has {existing_vector_count} vectors. Skipping processing.")
-        return
-    docs = extract_text_from_pdfs(bucket_name)
-    if not docs:
-        print("Error: No documents extracted from Supabase bucket.")
-        return
-    batch_size = 32
-    vectors = []
-    texts = [doc["text"] for doc in docs]
-    filenames = [doc["filename"] for doc in docs]
-    for i in range(0, len(texts), batch_size):
-        batch_texts = texts[i:i + batch_size]
-        embeddings = model.encode(batch_texts, batch_size=batch_size, show_progress_bar=True)
-        for j, embedding in enumerate(embeddings):
-            vectors.append((filenames[i + j], embedding.tolist(), {"text": batch_texts[j]}))
-    batch_size = 100
-    for i in range(0, len(vectors), batch_size):
-        batch = vectors[i:i + batch_size]
-        index.upsert(vectors=batch)
+        logger.info(f"Created serverless index: {INDEX_NAME}")
 
-# Function to retrieve relevant chunks from Pinecone
-def retrieve_context(index_name: str, query: str, top_k: int = 3):
-    index = pc.Index(index_name)
-    query_embedding = model.encode(query).tolist()
+    # Load & upsert
+    docs = extract_text_from_pdfs()
+    if not docs:
+        logger.warning("No documents extracted → nothing to index")
+        return
+
+    texts = [d["text"] for d in docs]
+    ids = [d["filename"] for d in docs]
+    metadatas = [{"text": t} for t in texts]
+
+    index = pc.Index(INDEX_NAME)
+    BATCH_SIZE = 100
+
+    for i in range(0, len(texts), 32):  # encode in smaller batches
+        batch_texts = texts[i : i + 32]
+        embeddings = model.encode(batch_texts, show_progress_bar=True)
+        batch_vecs = [
+            (ids[i + j], emb.tolist(), metadatas[i + j])
+            for j, emb in enumerate(embeddings)
+        ]
+
+        for k in range(0, len(batch_vecs), BATCH_SIZE):
+            index.upsert(vectors=batch_vecs[k : k + BATCH_SIZE])
+
+    logger.info(f"Upserted {len(texts)} vectors into '{INDEX_NAME}'")
+
+# ─── Retrieval & Generation ─────────────────────────────────
+def retrieve_context(query: str, top_k: int = 4) -> list[str]:
+    q_emb = model.encode(query).tolist()
     try:
-        results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
-        return [match["metadata"]["text"] for match in results["matches"] if "metadata" in match]
+        index = pc.Index("lawpal")
+        res = index.query(vector=q_emb, top_k=top_k, include_metadata=True)
+        return [m.metadata["text"] for m in res.matches if m.metadata and "text" in m.metadata]
     except Exception as e:
-        print(f"Error retrieving from Pinecone: {e}")
+        logger.error(f"Pinecone query failed: {e}")
         return []
 
-# Function to generate response using Groq
+
+# ─── Service-specific personality configs ──────────────────
+SERVICE_CONFIGS = {
+    "personal-and-family-legal-assistance": {
+        "label": "Personal & Family Legal Assistance",
+        "domains": "marriage, divorce, child custody, adoption, domestic violence, property inheritance, tenancy disputes, wills, succession, and protection orders under Indian family law",
+        "acts": "Hindu Marriage Act, Special Marriage Act, Hindu Succession Act, Protection of Women from Domestic Violence Act, Guardians and Wards Act, Transfer of Property Act",
+    },
+    "business-consumer-and-criminal-legal-assistance": {
+        "label": "Business, Consumer & Criminal Legal Assistance",
+        "domains": "business formation, contracts, intellectual property, consumer complaints, criminal defense, FIR procedures, bail, civil disputes, regulatory compliance, and corporate law",
+        "acts": "Companies Act, Consumer Protection Act, Indian Penal Code, Code of Criminal Procedure, Intellectual Property laws, Contract Act, Competition Act",
+    },
+    "consultation": {
+        "label": "General Legal Consultation",
+        "domains": "any area of Indian law including civil, criminal, family, corporate, constitutional, consumer, and tax law",
+        "acts": "Constitution of India and all applicable Indian statutes and legal frameworks",
+    },
+}
+
 def generate_response(query: str, contexts: list, history: list, service: str):
-    context_str = "\n\n".join(contexts) if contexts else "No specific information found."
-    history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
-    prompt = f"""
-You are a sophisticated AI legal assistant specializing in Indian {service.replace('-', ' ').title()} Services. Your objective is to provide precise, judicially relevant responses strictly within the scope of Indian law and applicable regulations.
+    cfg = SERVICE_CONFIGS.get(service, SERVICE_CONFIGS["consultation"])
+    ctx_str = "\n\n".join(f"[Legal Document {i+1}]:\n{c}" for i, c in enumerate(contexts)) if contexts else ""
 
-Ensure 100% clarity on the user’s query using available context and conversation history.
+    # ── System prompt: LawPal identity + service context ──
+    system_prompt = f"""You are **LawPal AI**, an expert AI legal assistant embedded in the **LawPal platform** — India's AI-powered legal guidance service designed to make legal help accessible to every Indian citizen.
 
-Respond strictly within the framework of Indian {service.replace('-', ' ').title()} laws, rules, and judicial precedents. If insufficient context is available, refer only to verified Indian government laws, schemes, or notifications.
+## Your Identity
+- You are LawPal's dedicated AI for the **{cfg['label']}** service.
+- You are knowledgeable, empathetic, and professional — like a trusted legal advisor speaking in plain language.
+- You serve Indian citizens who may not have access to expensive lawyers.
+- **LANGUAGE RULE (STRICT)**: Always respond in **English by default**. Only switch to another language (e.g. Hindi, Marathi) if the user's message is *entirely* written in that language. Never mix languages. Never use Hinglish.
 
-Avoid speculation or general knowledge. Do not provide personal opinions or unverified interpretations under any circumstance.
+## Your Expertise for This Service
+You specialize in: {cfg['domains']}.
+Key laws you reference: {cfg['acts']}.
 
-For queries involving complex legal analysis or calculations:
+## How You Respond
+1. **Be specific to Indian law**: Always refer to relevant Indian statutes, sections, and legal procedures.
+2. **Be helpful and clear**: Explain legal concepts in simple terms. Avoid unnecessary jargon.
+3. **Be empathetic**: Users may be in distress. Acknowledge their situation before giving advice.
+4. **Structure your answers**: Use bullet points, numbered steps, or headings when explaining procedures.
+5. **Always recommend professional help** for serious matters: "For your specific case, consulting a licensed advocate is strongly recommended."
+6. **Stay on-topic**: Only answer questions related to {cfg['label']}. Politely redirect off-topic queries.
+7. **Never fabricate laws**: If you're unsure, say so honestly.
 
-Proceed only if supported by explicit legal context.
+## Platform Context
+- Users access you through the LawPal platform at law-pal.vercel.app
+- This is a free, accessible legal guidance tool — not a substitute for actual legal representation.
+- You may reference LawPal features like: document guidance, helpline numbers (1800-LAW-PAL), and connecting with lawyers.
+{"## Relevant Legal Documents (from LawPal knowledge base)" + chr(10) + ctx_str if ctx_str else ""}"""
 
-Provide a step-by-step, statute-based explanation.
+    # ── Build structured message history for Groq ──
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
 
-Clearly state when the matter requires consultation with a licensed Indian legal professional.
+    for msg in history[-10:]:  # last 10 turns for context window efficiency
+        role = "assistant" if msg.get("role") == "bot" else "user"
+        messages.append({"role": role, "content": msg.get("content", "")})
 
-Maintain a professional, factual, and concise tone. Do not use informal language, emotions, or filler content.
+    messages.append({"role": "user", "content": query})
 
-Exclude all irrelevant or out-of-context details.
-
-Complete the response with a clear, actionable conclusion or recommendation.
-
-Your responses should be strictly factual, devoid of personal opinions or unverified interpretations. You are not a licensed legal professional and cannot provide legal advice. Always recommend consulting a qualified Indian legal professional for complex matters.
-
-Your sole objective is to deliver clear, compliant, and legally sound information related to Indian {service.replace('-', ' ').title()} Services.
-
-Conversation History:
-{history_str}
-
-Context:
-{context_str}
-
-Query:
-{query}
-
-Answer:
-"""
     try:
-        response = groq_client.chat.completions.create(
+        resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "You are a helpful government assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=700,
-            temperature=0.5
+            messages=messages,
+            max_tokens=800,
+            temperature=0.4,
         )
-        return response.choices[0].message.content.strip()
+        return resp.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Error generating response: {e}")
-        return "I'm sorry, but I encountered an issue generating a response."
+        logger.error(f"Groq failed: {e}")
+        return "I'm sorry, I'm having trouble responding right now. Please try again in a moment."
 
-# Common function to handle chat requests
+
+
 def handle_chat(service: str):
-    data = request.json
-    query = data.get('query')
-    user_id = data.get('user_id', 'default_user')
+    if service not in conversation_histories:
+        return jsonify({"error": "Invalid service"}), 400
+
+    data = request.json or {}
+    query = data.get("query")
+    user_id = data.get("user_id", "default_user")
+
     if not query:
-        return jsonify({"error": "No query provided"}), 400
+        return jsonify({"error": "No query"}), 400
+
     history = conversation_histories[service].setdefault(user_id, [])
-    contexts = retrieve_context("lawpal", query)
-    try:
-        response = generate_response(query, contexts, history, service)
-        history.append({"role": "user", "content": query})
-        history.append({"role": "bot", "content": response})
-        if len(history) > 15:
-            conversation_histories[service][user_id] = history[-15:]
-        return jsonify({"response": response})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    contexts = retrieve_context(query)
+    response_text = generate_response(query, contexts, history, service)
 
-# Route for fetching chat history
-@app.route('/<service>/history', methods=['GET', 'OPTIONS'])
-def get_chat_history(service):
-    if request.method == 'OPTIONS':
-        response = jsonify({"message": "CORS preflight successful"})
-        response.headers.add("Access-Control-Allow-Origin", "https://law-pal.vercel.app")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, X-User-ID")
-        return response, 200
-    if service not in conversation_histories:
-        return jsonify({"error": "Invalid service category"}), 400
-    user_id = request.headers.get('X-User-ID', 'default_user')
-    history = conversation_histories[service].get(user_id, [])
-    return jsonify({"history": history}), 200
+    history.append({"role": "user", "content": query})
+    history.append({"role": "bot", "content": response_text})
 
-# Route for chatbot queries
-@app.route('/<service>/chat', methods=['POST', 'OPTIONS'])
+    # Keep last 15 turns
+    if len(history) > 15:
+        conversation_histories[service][user_id] = history[-15:]  # type: ignore[index]
+
+    return jsonify({"response": response_text})
+
+# Routes (chat + history)
+@app.route("/<service>/chat", methods=["POST"])
 def chat_service(service):
-    if request.method == 'OPTIONS':
-        response = jsonify({"message": "CORS preflight successful"})
-        response.headers.add("Access-Control-Allow-Origin", "https://law-pal.vercel.app")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, X-User-ID")
-        return response, 200
-    if service not in conversation_histories:
-        return jsonify({"error": "Invalid service category"}), 400
     return handle_chat(service)
 
+@app.route("/<service>/history", methods=["GET"])
+def get_chat_history(service):
+    if service not in conversation_histories:
+        return jsonify({"error": "Invalid service"}), 400
+
+    user_id = request.headers.get("X-User-ID", "default_user")
+    hist = conversation_histories[service].get(user_id, [])
+    return jsonify({"history": hist})
+
+# ─── Main ───────────────────────────────────────────────────
 if __name__ == "__main__":
-    BUCKET_NAME = "pdfs"
-    # Run Pinecone index creation only if explicitly enabled
-    if os.getenv("CREATE_PINECONE_INDEX", "false").lower() == "true":
-        create_pinecone_index(BUCKET_NAME)
-    port = int(os.environ.get("PORT", 5000))  # Hugging Face default port
+    # Only create/index once – better to run manually or via CI/CD
+    if os.getenv("SETUP_PINECONE", "false").lower() == "true":
+        setup_pinecone_index()
+
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block auth_mode %}protected{% endblock %}
+{% block body %}
+<div class="formal-app-bg min-h-screen">
+  <main class="formal-shell pt-8 md:pt-10">
+    <header class="flex items-center justify-between gap-4 border-b border-slate-300/70 pb-4">
+      <div>
+        <a href="/dashboard" class="formal-link text-sm">Back to dashboard</a>
+        <h1 class="formal-title mt-2">Legal Chat</h1>
+      </div>
+      <p class="hidden md:block text-sm text-slate-600">Grounded legal responses with document context.</p>
+    </header>
+
+    <div class="mt-6 lg:grid lg:grid-cols-12 lg:gap-6">
+      <section class="lg:col-span-8 formal-panel p-4 md:p-5">
+        <div id="chatBox" class="h-[60vh] min-h-[360px] overflow-y-auto pr-1"></div>
+
+        <form id="chatForm" class="mt-4 border border-slate-300 rounded-xl px-2 py-2 flex items-center gap-2 bg-white/80">
+          <button id="uploadTrigger" type="button" class="shrink-0 h-10 w-10 rounded-lg border border-slate-300 hover:bg-slate-50" title="Upload legal document">+</button>
+          <input id="chatFileInput" name="file" type="file" accept=".pdf,.docx" class="hidden" />
+          <input name="query" class="formal-input flex-1 !py-2 !px-3" placeholder="Ask a legal question" autocomplete="off" />
+          <button class="formal-btn-primary px-4 py-2">Send</button>
+        </form>
+        <p id="chatStatus" class="mt-2 text-xs text-slate-500"></p>
+      </section>
+
+      <aside class="lg:col-span-4 mt-5 lg:mt-0 formal-panel p-4 md:p-5">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-slate-800 tracking-wide uppercase">Documents</h2>
+          <button id="refreshDocs" class="formal-pill text-xs px-2.5 py-1">Refresh</button>
+        </div>
+        <p class="text-xs text-slate-600 mt-2">Only legal documents are accepted for indexing and retrieval.</p>
+        <div id="docsList" class="mt-4 space-y-2 max-h-[52vh] overflow-y-auto"></div>
+      </aside>
+    </div>
+  </main>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

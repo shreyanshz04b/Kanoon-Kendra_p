@@ -4,8 +4,9 @@ pinecone
 sentence-transformers
 groq==0.20.0
 huggingface_hub
-dotenv
+python-dotenv
 PyMuPDF
 tqdm
 supabase
 gunicorn
+ 

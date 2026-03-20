@@ -4,13 +4,11 @@ import { FiMenu, FiX } from "react-icons/fi";
 import { supabase } from './supabase';
 
 export const Header = ({ user }) => {
-  const apiUrl = import.meta.env.VITE_API_URL;
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      const apiUrl = import.meta.env.VITE_API_URL;
       setScrolled(window.scrollY > 10);
     };
     window.addEventListener('scroll', handleScroll);
@@ -18,7 +16,6 @@ export const Header = ({ user }) => {
   }, []);
 
   const handleLogout = async () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -45,9 +42,8 @@ export const Header = ({ user }) => {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-1">
             <Link to="/" className="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300">Home</Link>
-            <Link to="/services" className="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300">Services</Link>
             <Link to="/about" className="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300">About</Link>
-            <Link to="/resources" className="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300">Resources</Link>
+            {user && <Link to="/resources" className="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300">Resources</Link>}
             <Link to="/contact" className="px-4 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300">Contact</Link>
             
             <div className="ml-4 flex space-x-2">
@@ -59,20 +55,7 @@ export const Header = ({ user }) => {
                   Logout
                 </button>
               ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="px-4 py-2 rounded-lg font-medium bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all duration-300"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="px-4 py-2 rounded-lg font-medium bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300"
-                  >
-                    Sign Up
-                  </Link>
-                </>
+                <></>
               )}
             </div>
           </div>
@@ -95,21 +78,18 @@ export const Header = ({ user }) => {
                 className="px-4 py-3 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 block">
                 Home
               </Link>
-              <Link to="/services" 
-                onClick={() => setIsOpen(false)}
-                className="px-4 py-3 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 block">
-                Services
-              </Link>
               <Link to="/about" 
                 onClick={() => setIsOpen(false)}
                 className="px-4 py-3 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 block">
                 About
               </Link>
-              <Link to="/resources" 
-                onClick={() => setIsOpen(false)}
-                className="px-4 py-3 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 block">
-                Resources
-              </Link>
+              {user && (
+                <Link to="/resources" 
+                  onClick={() => setIsOpen(false)}
+                  className="px-4 py-3 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 block">
+                  Resources
+                </Link>
+              )}
               <Link to="/contact" 
                 onClick={() => setIsOpen(false)}
                 className="px-4 py-3 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 block">
@@ -127,22 +107,7 @@ export const Header = ({ user }) => {
                   Logout
                 </button>
               ) : (
-                <div className="flex flex-col space-y-2 pt-2">
-                  <Link
-                    to="/login"
-                    onClick={() => setIsOpen(false)}
-                    className="w-full py-3 rounded-lg font-medium bg-white/10 backdrop-blur-md text-center border border-white/20 text-white"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/signup"
-                    onClick={() => setIsOpen(false)}
-                    className="w-full py-3 rounded-lg font-medium bg-gradient-to-r from-purple-600 to-blue-600 text-white text-center"
-                  >
-                    Sign Up
-                  </Link>
-                </div>
+                <></>
               )}
             </div>
           </div>

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabase';
 
 function Login() {
-  const apiUrl = import.meta.env.VITE_API_URL;
   const [authMode, setAuthMode] = useState('password'); // or 'otp'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,7 +25,6 @@ function Login() {
   }, []);
 
   const handlePasswordLogin = async (e) => {
-    const apiUrl = import.meta.env.VITE_API_URL;
     e.preventDefault();
     try {
       const { error } = await supabase.auth.signInWithPassword({

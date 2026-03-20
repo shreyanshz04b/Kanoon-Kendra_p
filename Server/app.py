@@ -20,13 +20,27 @@ app = Flask(__name__)
 # Configure CORS
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://law-pal.vercel.app", "http://localhost:5173"],
-        "methods": ["GET", "POST", "OPTIONS"],
+        "origins": [
+            "https://law-pal.vercel.app",
+            r"http://localhost:5173",
+            r"http://127\.0\.0\.1:5173",
+            r"http://192\.168\.\d+\.\d+:5173",
+            r"http://10\.\d+\.\d+\.\d+:5173",
+            r"http://172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:5173",
+        ],
+        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "X-User-ID"],
     }
 })
 
-dotenv.load_dotenv()
+# Load environment variables - try multiple paths
+dotenv_path = os.path.join(os.path.dirname(__file__), "..", "App", ".env")
+if not os.path.exists(dotenv_path):
+    dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if not os.path.exists(dotenv_path):
+    dotenv_path = ".env"
+dotenv.load_dotenv(dotenv_path)
+print(f"Loading .env from: {os.path.abspath(dotenv_path)}", flush=True)
 
 # Initialize Pinecone
 PINECONE_API_KEY = os.getenv("PINECONE_API")
@@ -80,10 +94,10 @@ def submit_form():
         response = supabase.table("user_forms").insert(data).execute()
         logger.debug("Supabase response: %s", response)
 
-        if response.status_code == 201:
+        if response.data:
             return jsonify({"message": "Form submitted successfully!"}), 201
         else:
-            return jsonify({"error": response.get("message", "Failed to store data in Supabase")}), 500
+            return jsonify({"error": "Failed to store data in Supabase"}), 500
 
     except Exception as e:
         logger.error("Error in submit_form: %s", str(e), exc_info=True)
@@ -172,19 +186,22 @@ def create_pinecone_index(bucket_name: str):
 
 # Function to retrieve relevant chunks from Pinecone
 def retrieve_context(index_name: str, query: str, top_k: int = 3):
-    index = pc.Index(index_name)
-    query_embedding = model.encode(query).tolist()
     try:
+        index = pc.Index(index_name)
+        query_embedding = model.encode(query).tolist()
         results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
         return [match["metadata"]["text"] for match in results["matches"] if "metadata" in match]
     except Exception as e:
-        print(f"Error retrieving from Pinecone: {e}")
-        return []
+        logger.warning(f"Error retrieving from Pinecone index '{index_name}': {e}")
+        print(f"Note: Proceeding without RAG context. Error: {e}")
+        return []  # Return empty list to allow response generation without context
 
 # Function to generate response using Groq
 def generate_response(query: str, contexts: list, history: list, service: str):
     context_str = "\n\n".join(contexts) if contexts else "No specific information found."
-    history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
+    # Keep only recent turns to avoid repetitive model anchoring on stale chat.
+    recent_history = history[-6:] if history else []
+    history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent_history])
     prompt = f"""
 You are a sophisticated AI legal assistant specializing in Indian {service.replace('-', ' ').title()} Services. Your objective is to provide precise, judicially relevant responses strictly within the scope of Indian law and applicable regulations.
 
@@ -203,6 +220,10 @@ Provide a step-by-step, statute-based explanation.
 Clearly state when the matter requires consultation with a licensed Indian legal professional.
 
 Maintain a professional, factual, and concise tone. Do not use informal language, emotions, or filler content.
+
+Do not start with phrases like "As previously explained" unless the user explicitly asks a follow-up to a prior answer.
+
+Answer the user's current query directly in a fresh way each time.
 
 Exclude all irrelevant or out-of-context details.
 
@@ -245,42 +266,50 @@ def handle_chat(service: str):
     user_id = data.get('user_id', 'default_user')
     if not query:
         return jsonify({"error": "No query provided"}), 400
+    
+    logger.info(f"Chat request - Service: {service}, User: {user_id}, Query: {query[:50]}")
+    
     history = conversation_histories[service].setdefault(user_id, [])
-    contexts = retrieve_context("lawpal", query)
     try:
+        logger.info("Retrieving context from Pinecone...")
+        contexts = retrieve_context("lawpal", query)
+        logger.info(f"Retrieved {len(contexts)} contexts")
+        
+        logger.info("Generating response with Groq...")
         response = generate_response(query, contexts, history, service)
+        logger.info(f"Generated response: {response[:100]}")
+        
         history.append({"role": "user", "content": query})
         history.append({"role": "bot", "content": response})
         if len(history) > 15:
             conversation_histories[service][user_id] = history[-15:]
         return jsonify({"response": response})
     except Exception as e:
+        logger.error(f"Error in handle_chat: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 # Route for fetching chat history
-@app.route('/<service>/history', methods=['GET', 'OPTIONS'])
+@app.route('/<service>/history', methods=['GET'])
 def get_chat_history(service):
-    if request.method == 'OPTIONS':
-        response = jsonify({"message": "CORS preflight successful"})
-        response.headers.add("Access-Control-Allow-Origin", "https://law-pal.vercel.app")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, X-User-ID")
-        return response, 200
     if service not in conversation_histories:
         return jsonify({"error": "Invalid service category"}), 400
     user_id = request.headers.get('X-User-ID', 'default_user')
     history = conversation_histories[service].get(user_id, [])
     return jsonify({"history": history}), 200
 
+
+@app.route('/<service>/history', methods=['DELETE'])
+def clear_chat_history(service):
+    if service not in conversation_histories:
+        return jsonify({"error": "Invalid service category"}), 400
+
+    user_id = request.headers.get('X-User-ID', 'default_user')
+    conversation_histories[service][user_id] = []
+    return jsonify({"message": "Chat history cleared"}), 200
+
 # Route for chatbot queries
-@app.route('/<service>/chat', methods=['POST', 'OPTIONS'])
+@app.route('/<service>/chat', methods=['POST'])
 def chat_service(service):
-    if request.method == 'OPTIONS':
-        response = jsonify({"message": "CORS preflight successful"})
-        response.headers.add("Access-Control-Allow-Origin", "https://law-pal.vercel.app")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, X-User-ID")
-        return response, 200
     if service not in conversation_histories:
         return jsonify({"error": "Invalid service category"}), 400
     return handle_chat(service)

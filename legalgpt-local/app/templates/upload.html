@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block auth_mode %}protected{% endblock %}
+{% block body %}
+<div class="formal-app-bg min-h-screen">
+  <main class="formal-shell pt-8 md:pt-10">
+    <header class="border-b border-slate-300/70 pb-4">
+      <a href="/dashboard" class="formal-link text-sm">Back to dashboard</a>
+      <h1 class="formal-title mt-2">Upload Document</h1>
+      <p class="formal-subtitle mt-3">Upload legal files for indexing. You can also upload directly inside chat.</p>
+    </header>
+
+    <section class="mt-6 formal-panel max-w-2xl p-5 md:p-6">
+      <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
+        <label class="block text-sm text-slate-700">Select file
+          <input type="file" name="file" accept=".pdf,.docx" class="formal-input mt-1" required />
+        </label>
+        <button class="formal-btn-primary px-4 py-2">Upload</button>
+      </form>
+      <button id="indexBtn" class="mt-3 px-4 py-2 rounded-lg border border-slate-300 hidden bg-white/70">Index Uploaded Document</button>
+      <p id="uploadMsg" class="mt-3 text-sm"></p>
+    </section>
+  </main>
+</div>
+{% endblock %}

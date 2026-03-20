@@ -1,0 +1,3 @@
+cd legalgpt-local
+ollama serve
+python run.py

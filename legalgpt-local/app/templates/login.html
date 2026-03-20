@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block auth_mode %}public-only{% endblock %}
+{% block body %}
+<div class="formal-app-bg min-h-screen">
+  <main class="formal-shell md:pt-16">
+    <div class="md:grid md:grid-cols-12 md:gap-8 items-start">
+      <section class="md:col-span-6 pb-8 md:pb-0">
+        <p class="uppercase tracking-[0.16em] text-xs text-slate-600">Account Access</p>
+        <h1 class="formal-title mt-3">Sign In to LegalGPT</h1>
+        <p class="formal-subtitle mt-4 max-w-xl">Use the credentials provided by your administrator to continue to your legal workspace.</p>
+        <p class="formal-subtitle mt-3">Need access first? <a class="formal-link" href="/contact">Request access</a>.</p>
+      </section>
+
+      <section class="md:col-span-6 formal-panel p-5 md:p-6">
+        <form id="loginForm" class="space-y-4">
+          <label class="block text-sm text-slate-700">Username
+            <input name="username" placeholder="Enter username" class="formal-input mt-1" required />
+          </label>
+          <label class="block text-sm text-slate-700">Password
+            <input name="password" type="password" placeholder="Enter password" class="formal-input mt-1" required />
+          </label>
+          <button class="w-full formal-btn-primary py-2.5 text-sm font-medium">Sign In</button>
+        </form>
+        <p class="mt-4 text-sm text-slate-600">Forgot password? <a class="formal-link" href="/forgot-password">Generate a temporary password</a>.</p>
+        <p id="loginMsg" class="mt-3 text-sm"></p>
+      </section>
+    </div>
+  </main>
+</div>
+{% endblock %}

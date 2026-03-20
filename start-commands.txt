@@ -1,0 +1,5 @@
+cd Server
+python app.py
+
+cd App/project
+npm run dev

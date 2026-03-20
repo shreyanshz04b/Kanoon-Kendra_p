@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LegalGPT | Precision Legal Intelligence</title>
+    <meta
+      name="description"
+      content="LegalGPT delivers trusted legal intelligence with refined speed, clarity, and confidence."
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              cream: "#f4efe6",
+              parchment: "#ebe2d2",
+              ink: "#172235",
+              charcoal: "#263143",
+              gold: "#8f6b2e",
+            },
+            fontFamily: {
+              serif: ["Cormorant Garamond", "Times New Roman", "serif"],
+            },
+            boxShadow: {
+              soft: "0 22px 60px rgba(22, 33, 51, 0.13)",
+            },
+          },
+        },
+      };
+    </script>
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --cream: #f4efe6;
+        --parchment: #ebe2d2;
+        --ink: #172235;
+        --charcoal: #263143;
+        --gold: #8f6b2e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: radial-gradient(circle at 12% 14%, #fbf8f1 0%, var(--cream) 40%, #e8dece 100%);
+        color: var(--ink);
+        font-family: "Cormorant Garamond", serif;
+        scroll-behavior: smooth;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        z-index: -1;
+        inset: auto;
+        pointer-events: none;
+        border-radius: 999px;
+        filter: blur(62px);
+        opacity: 0.38;
+      }
+
+      body::before {
+        width: 340px;
+        height: 340px;
+        top: -120px;
+        right: -80px;
+        background: #d3c2a3;
+      }
+
+      body::after {
+        width: 420px;
+        height: 420px;
+        bottom: -180px;
+        left: -130px;
+        background: #c9d3e2;
+      }
+
+      .grain {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
+        background-image: radial-gradient(rgba(23, 34, 53, 0.065) 0.6px, transparent 0.6px);
+        background-size: 3px 3px;
+        opacity: 0.26;
+      }
+
+      .fade-item {
+        opacity: 0;
+        transform: translateY(26px);
+        transition: opacity 800ms ease, transform 800ms ease;
+      }
+
+      .fade-item.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .hero-tagline {
+        min-height: 3rem;
+      }
+
+      .line-run {
+        position: relative;
+      }
+
+      .line-run::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        bottom: -0.4rem;
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(23, 34, 53, 0.5), transparent);
+      }
+
+      .shot {
+        border: 1px solid rgba(23, 34, 53, 0.2);
+        border-radius: 1.3rem;
+        overflow: hidden;
+        box-shadow: 0 22px 60px rgba(22, 33, 51, 0.13);
+        transform: translateY(var(--y, 0));
+        transition: transform 240ms ease;
+      }
+
+      .shot-head {
+        height: 34px;
+        border-bottom: 1px solid rgba(23, 34, 53, 0.15);
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.7), rgba(235, 226, 210, 0.8));
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(23, 34, 53, 0.35);
+      }
+
+      .shot-body {
+        background: linear-gradient(160deg, #f9f6ef 0%, #ece3d3 100%);
+        min-height: 270px;
+        position: relative;
+      }
+
+      .shot-body::before {
+        content: "";
+        position: absolute;
+        width: 66%;
+        height: 10px;
+        left: 17%;
+        top: 24%;
+        border-radius: 999px;
+        background: rgba(23, 34, 53, 0.14);
+      }
+
+      .shot-body::after {
+        content: "";
+        position: absolute;
+        width: 54%;
+        height: 10px;
+        left: 23%;
+        top: 34%;
+        border-radius: 999px;
+        background: rgba(23, 34, 53, 0.12);
+      }
+
+      .parallax {
+        will-change: transform;
+      }
+
+      @media (max-width: 768px) {
+        .hero-tagline {
+          min-height: 2.2rem;
+        }
+      }
+    </style>
+  </head>
+
+  <body class="text-ink antialiased">
+    <div class="grain"></div>
+
+    <header class="fixed top-0 left-0 right-0 z-30">
+      <div class="mx-auto max-w-6xl px-6 md:px-10 pt-6">
+        <div class="flex items-center justify-between border-b border-ink/20 pb-4">
+          <a href="#" class="tracking-[0.25em] text-base md:text-lg uppercase">LegalGPT</a>
+          <nav class="hidden md:flex items-center gap-10 text-xl">
+            <a href="#capabilities" class="hover:text-gold transition-colors">Capabilities</a>
+            <a href="#vidhi" class="hover:text-gold transition-colors">Vidhi</a>
+            <a href="#contact" class="hover:text-gold transition-colors">Start</a>
+          </nav>
+          <button
+            id="menuBtn"
+            class="md:hidden text-3xl leading-none"
+            aria-label="Open menu"
+          >
+            ≡
+          </button>
+        </div>
+        <div id="mobileMenu" class="hidden md:hidden border-b border-ink/20 py-3">
+          <a href="#capabilities" class="block py-1 text-2xl">Capabilities</a>
+          <a href="#vidhi" class="block py-1 text-2xl">Vidhi</a>
+          <a href="/contact" class="block py-1 text-2xl">Get Started</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative min-h-screen flex items-center pt-40 pb-24">
+        <div class="mx-auto max-w-6xl px-6 md:px-10 w-full">
+          <p class="fade-item tracking-[0.12em] uppercase text-lg md:text-xl text-charcoal/80">AI-Driven Legal Intelligence</p>
+          <h1 class="fade-item mt-3 text-6xl md:text-8xl lg:text-[7.5rem] leading-[0.9] font-semibold max-w-5xl">
+            Legal Clarity,
+            <span class="line-run inline-block">Shaped for Decisions.</span>
+          </h1>
+
+          <p id="heroTagline" class="fade-item hero-tagline mt-8 text-3xl md:text-4xl text-charcoal/90"></p>
+
+          <div class="fade-item mt-12">
+            <a
+              href="/contact"
+              class="inline-flex items-center justify-center px-8 py-3 rounded-full bg-ink text-cream text-2xl tracking-wide hover:bg-charcoal transition-colors"
+              >Get Started</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section id="capabilities" class="py-20 md:py-28">
+        <div class="mx-auto max-w-6xl px-6 md:px-10">
+          <div class="fade-item max-w-4xl">
+            <p class="uppercase tracking-[0.12em] text-lg text-charcoal/75">Capabilities</p>
+            <h2 class="mt-3 text-5xl md:text-7xl leading-[0.95]">
+              Built for Real Legal Work,
+              <br />
+              Not Just Chat.
+            </h2>
+          </div>
+
+          <article class="fade-item mt-14 md:mt-20">
+            <p class="text-3xl md:text-4xl max-w-3xl leading-tight">
+              Context-aware legal responses grounded in your domain sources and workflows.
+            </p>
+            <div class="shot mt-8 parallax" data-speed="0.08">
+              <div class="shot-head flex items-center gap-2 px-4">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+              <div class="shot-body p-10 flex items-end">
+                <p class="text-2xl md:text-3xl max-w-2xl text-charcoal/85">Natural conversation interface for legal queries, statutes, and procedural guidance.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="fade-item mt-16 md:mt-20">
+            <p class="text-3xl md:text-4xl max-w-3xl leading-tight">
+              Document understanding and retrieval that surfaces relevant legal content in seconds.
+            </p>
+            <div class="shot mt-8 parallax" data-speed="0.12" style="--y: 14px;">
+              <div class="shot-head flex items-center gap-2 px-4">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+              <div class="shot-body p-10 flex items-end">
+                <p class="text-2xl md:text-3xl max-w-2xl text-charcoal/85">Instant extraction, indexing, and precise answer grounding from uploaded legal documents.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="fade-item mt-16 md:mt-20">
+            <p class="text-3xl md:text-4xl max-w-3xl leading-tight">
+              Reliable workflow support from consultation intake to follow-up assistance.
+            </p>
+            <div class="shot mt-8 parallax" data-speed="0.1" style="--y: 8px;">
+              <div class="shot-head flex items-center gap-2 px-4">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+              <div class="shot-body p-10 flex items-end">
+                <p class="text-2xl md:text-3xl max-w-2xl text-charcoal/85">Seamless legal service orchestration with structured history and secure interactions.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="vidhi" class="py-20 md:py-28">
+        <div class="mx-auto max-w-6xl px-6 md:px-10">
+          <div class="fade-item border-y border-ink/25 py-14 md:py-18">
+            <p class="uppercase tracking-[0.12em] text-lg text-charcoal/75">AI Representative</p>
+            <h2 class="mt-4 text-5xl md:text-7xl leading-[0.95]">Meet Vidhi, AI at Work.</h2>
+            <p class="mt-8 text-3xl md:text-4xl max-w-4xl leading-tight text-charcoal/90">
+              Vidhi represents LegalGPT as your intelligent legal interface, delivering focused responses,
+              surfacing critical context, and maintaining continuity across every interaction.
+            </p>
+            <div class="mt-10 flex flex-wrap gap-4 text-2xl md:text-3xl">
+              <span class="px-5 py-2 rounded-full border border-ink/25">Statute-aware</span>
+              <span class="px-5 py-2 rounded-full border border-ink/25">Context-persistent</span>
+              <span class="px-5 py-2 rounded-full border border-ink/25">Decision-focused</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="py-20 md:py-28">
+        <div class="mx-auto max-w-6xl px-6 md:px-10">
+          <div class="fade-item">
+            <p class="uppercase tracking-[0.12em] text-lg text-charcoal/75">Next Step</p>
+            <h2 class="mt-4 text-5xl md:text-7xl leading-[0.95] max-w-4xl">Bring Premium Legal Intelligence to Your Team.</h2>
+            <div class="mt-10">
+              <a
+                href="/contact"
+                class="inline-flex items-center justify-center px-8 py-3 rounded-full bg-ink text-cream text-2xl tracking-wide hover:bg-charcoal transition-colors"
+                >Get Started</a
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="pb-10">
+      <div class="mx-auto max-w-6xl px-6 md:px-10 border-t border-ink/20 pt-6 flex flex-wrap items-center justify-between gap-4 text-xl text-charcoal/80">
+        <p>LegalGPT</p>
+        <p>Designed for trusted legal clarity.</p>
+      </div>
+    </footer>
+
+    <script>
+      async function enforceLoggedInRedirect() {
+        try {
+          const res = await fetch("/api/auth/session", { method: "GET" });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.authenticated) {
+            window.location.href = "/dashboard";
+          }
+        } catch (_) {
+          // Ignore network issues and keep page usable.
+        }
+      }
+
+      window.addEventListener("pageshow", () => {
+        enforceLoggedInRedirect();
+      });
+
+      const menuBtn = document.getElementById("menuBtn");
+      const mobileMenu = document.getElementById("mobileMenu");
+      menuBtn?.addEventListener("click", () => {
+        mobileMenu.classList.toggle("hidden");
+      });
+
+      const phrases = [
+        "A refined legal co-pilot for modern practice.",
+        "From first question to confident legal action.",
+        "Elegant speed. Authoritative legal assistance.",
+      ];
+      const heroTagline = document.getElementById("heroTagline");
+      let phraseIndex = 0;
+      let charIndex = 0;
+      let deleting = false;
+
+      function typeLoop() {
+        const current = phrases[phraseIndex];
+        if (!heroTagline) return;
+
+        if (!deleting) {
+          heroTagline.textContent = current.slice(0, charIndex + 1);
+          charIndex += 1;
+          if (charIndex === current.length) {
+            deleting = true;
+            setTimeout(typeLoop, 1600);
+            return;
+          }
+        } else {
+          heroTagline.textContent = current.slice(0, charIndex - 1);
+          charIndex -= 1;
+          if (charIndex === 0) {
+            deleting = false;
+            phraseIndex = (phraseIndex + 1) % phrases.length;
+          }
+        }
+
+        setTimeout(typeLoop, deleting ? 26 : 54);
+      }
+      setTimeout(typeLoop, 350);
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("visible");
+            }
+          });
+        },
+        { threshold: 0.16 }
+      );
+
+      document.querySelectorAll(".fade-item").forEach((el, idx) => {
+        el.style.transitionDelay = `${Math.min(idx * 80, 360)}ms`;
+        observer.observe(el);
+      });
+
+      const parallaxItems = document.querySelectorAll(".parallax");
+      window.addEventListener("scroll", () => {
+        const y = window.scrollY;
+        parallaxItems.forEach((item) => {
+          const speed = Number(item.getAttribute("data-speed") || "0.08");
+          item.style.transform = `translateY(${y * speed * -0.2}px)`;
+        });
+      });
+    </script>
+  </body>
+</html>
